@@ -28,6 +28,11 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/*
+ *http://blog.csdn.net/kaixin89/article/details/42217109
+ *http://blog.csdn.net/guodongxiaren/article/details/44747719
+ * */
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -45,9 +50,11 @@ void zlibc_free(void *ptr) {
 #include "zmalloc.h"
 #include "atomicvar.h"
 
+/*有HAVE_MALLOC_SIZE PREFIX_SIZE 设置为0*/
 #ifdef HAVE_MALLOC_SIZE
 #define PREFIX_SIZE (0)
 #else
+/*设置PREFIX_SIZE*/
 #if defined(__sun) || defined(__sparc) || defined(__sparc__)
 #define PREFIX_SIZE (sizeof(long long))
 #else
@@ -56,6 +63,7 @@ void zlibc_free(void *ptr) {
 #endif
 
 /* Explicitly override malloc/free etc when using tcmalloc. */
+/*定义宏覆盖 malloc calloc realloc free*/
 #if defined(USE_TCMALLOC)
 #define malloc(size) tc_malloc(size)
 #define calloc(count,size) tc_calloc(count,size)
@@ -68,6 +76,7 @@ void zlibc_free(void *ptr) {
 #define free(ptr) je_free(ptr)
 #endif
 
+/*分配内存时，统计内存做内存对齐计算*/
 #define update_zmalloc_stat_alloc(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
@@ -78,6 +87,7 @@ void zlibc_free(void *ptr) {
     } \
 } while(0)
 
+/*释放内存时，统计内存做内存对齐计算*/
 #define update_zmalloc_stat_free(__n) do { \
     size_t _n = (__n); \
     if (_n&(sizeof(long)-1)) _n += sizeof(long)-(_n&(sizeof(long)-1)); \
@@ -88,10 +98,12 @@ void zlibc_free(void *ptr) {
     } \
 } while(0)
 
+/*定义静态变量,内存使用量,malloc线程安全开关*/
 static size_t used_memory = 0;
 static int zmalloc_thread_safe = 0;
 pthread_mutex_t used_memory_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+/*默认oom处理函数*/
 static void zmalloc_default_oom(size_t size) {
     fprintf(stderr, "zmalloc: Out of memory trying to allocate %zu bytes\n",
         size);
@@ -99,11 +111,14 @@ static void zmalloc_default_oom(size_t size) {
     abort();
 }
 
+/*设置oom处理函数*/
 static void (*zmalloc_oom_handler)(size_t) = zmalloc_default_oom;
 
 void *zmalloc(size_t size) {
+	/*分配内存，增加了一个PREFIX_SIZE*/
     void *ptr = malloc(size+PREFIX_SIZE);
 
+	/*设置oom处理函数*/
     if (!ptr) zmalloc_oom_handler(size);
 #ifdef HAVE_MALLOC_SIZE
     update_zmalloc_stat_alloc(zmalloc_size(ptr));
@@ -162,6 +177,7 @@ void *zrealloc(void *ptr, size_t size) {
  * malloc itself, given that in that case we store a header with this
  * information as the first bytes of every allocation. */
 #ifndef HAVE_MALLOC_SIZE
+/*计算分配的内存*/
 size_t zmalloc_size(void *ptr) {
     void *realptr = (char*)ptr-PREFIX_SIZE;
     size_t size = *((size_t*)realptr);
